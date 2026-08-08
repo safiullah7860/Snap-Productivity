@@ -93,6 +93,8 @@ killall SnapProductivity 2>/dev/null || true
 open ~/Applications/Snap-Productivity.app
 ```
 
+If macOS lists Snap-Productivity but AXIsProcessTrusted remains false, remove the app from Accessibility/Input Monitoring, restart the Mac, add it again, and relaunch the app.
+
 ## Start automatically at login
 
 Snap-Productivity registers itself with macOS as a Login Item when it launches.
@@ -138,7 +140,7 @@ pgrep -fl SnapProductivity
 
 Snap-Productivity creates a menu-bar status item. The icon is intentionally minimal.
 
-If the icon is not visible, this does not by itself mean the application is stopped. Verify the process and log with:
+If the icon is not visible, this does not by itself mean the application is stopped; it likely means that you don't have enough menu bar icon space. Verify the process and log with:
 
 ```bash
 pgrep -fl SnapProductivity

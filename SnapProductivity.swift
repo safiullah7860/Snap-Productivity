@@ -6,14 +6,14 @@ import ServiceManagement
 
 final class SnapLogger {
     static let shared = SnapLogger()
-    private let queue = DispatchQueue(label: "com.safibaig.SnapReplacement.logger")
+    private let queue = DispatchQueue(label: "com.safibaig.SnapProductivity.logger")
     private let url: URL
 
     private init() {
         let logs = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
-        url = logs.appendingPathComponent("SnapReplacement.log")
+        url = logs.appendingPathComponent("Snap-Productivity.log")
     }
 
     func log(_ message: String) {
@@ -43,9 +43,9 @@ final class HotkeyManager {
     private(set) var state: State = .stopped
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private weak var delegate: SnapReplacementDelegate?
+    private weak var delegate: SnapProductivityDelegate?
 
-    init(delegate: SnapReplacementDelegate) {
+    init(delegate: SnapProductivityDelegate) {
         self.delegate = delegate
     }
 
@@ -151,9 +151,13 @@ final class HotkeyManager {
         }
 
         let flags = event.flags
+        // Match Command + number only. Shift, Option, Control, and Fn must not be held.
+        // This prevents shortcuts such as Command+Shift+4 from being intercepted.
         guard flags.contains(.maskCommand),
+              !flags.contains(.maskShift),
               !flags.contains(.maskControl),
-              !flags.contains(.maskAlternate) else {
+              !flags.contains(.maskAlternate),
+              !flags.contains(.maskSecondaryFn) else {
             return Unmanaged.passUnretained(event)
         }
 
@@ -167,7 +171,7 @@ final class HotkeyManager {
             self?.delegate?.performShortcut(slot: slot)
         }
 
-        // Consume only Command+0 through Command+9.
+        // Consume only bare Command+0 through Command+9.
         return nil
     }
 
@@ -305,14 +309,14 @@ final class DockReader {
     }
 }
 
-final class SnapReplacementDelegate: NSObject, NSApplicationDelegate {
+final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotkeys: HotkeyManager?
     private let dockReader = DockReader()
     private var startupMessage = "Starting…"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SnapLogger.shared.log("=== Snap-Productivity 1.0.0 launched ===")
+        SnapLogger.shared.log("=== Snap-Productivity 1.0.1 launched ===")
         SnapLogger.shared.log("Bundle path: \(Bundle.main.bundlePath)")
         SnapLogger.shared.log("PID: \(ProcessInfo.processInfo.processIdentifier)")
         SnapLogger.shared.log("AXIsProcessTrusted at launch: \(AXIsProcessTrusted())")
@@ -551,7 +555,7 @@ final class SnapReplacementDelegate: NSObject, NSApplicationDelegate {
 }
 
 let app = NSApplication.shared
-let delegate = SnapReplacementDelegate()
+let delegate = SnapProductivityDelegate()
 SnapLogger.shared.log("NSApplication starting run loop")
 app.delegate = delegate
 app.run()
