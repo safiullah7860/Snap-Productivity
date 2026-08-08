@@ -66,4 +66,4 @@ echo "2. Enable Snap-Productivity in Input Monitoring."
 echo "3. Quit and relaunch it once."
 echo "4. Confirm it appears under General -> Login Items & Extensions."
 echo
-echo "This build uses Accessibility window raising after activation to handle apps whose process becomes active while their window remains hidden."
+echo "This build uses LaunchServices/NSWorkspace to show running or closed apps, with short Accessibility window-raise retries for WindowServer timing."
