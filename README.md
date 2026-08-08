@@ -95,6 +95,13 @@ open ~/Applications/Snap-Productivity.app
 
 If macOS lists Snap-Productivity but AXIsProcessTrusted remains false, remove the app from Accessibility/Input Monitoring, restart the Mac, add it again, and relaunch the app.
 
+To clear Accessibility and Input Monitoring settings:
+
+```bash
+tccutil reset Accessibility com.safibaig.SnapProductivity
+tccutil reset ListenEvent com.safibaig.SnapProductivity
+```
+
 ## Start automatically at login
 
 Snap-Productivity registers itself with macOS as a Login Item when it launches.

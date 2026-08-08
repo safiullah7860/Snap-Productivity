@@ -316,7 +316,7 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
     private var startupMessage = "Starting…"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SnapLogger.shared.log("=== Snap-Productivity 1.0.1 launched ===")
+        SnapLogger.shared.log("=== Snap-Productivity 1.0.4 launched ===")
         SnapLogger.shared.log("Bundle path: \(Bundle.main.bundlePath)")
         SnapLogger.shared.log("PID: \(ProcessInfo.processInfo.processIdentifier)")
         SnapLogger.shared.log("AXIsProcessTrusted at launch: \(AXIsProcessTrusted())")
@@ -467,16 +467,13 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
 
         let dockApp = apps[index]
 
-        if let bundleID = dockApp.bundleID,
-           let running = NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleID)
-            .first {
-
-            if running.isActive {
+        if let running = runningApplication(for: dockApp) {
+            if running.isActive && hasVisibleWindow(for: running) {
+                SnapLogger.shared.log("Hiding active app: \(dockApp.title)")
                 running.hide()
             } else {
-                running.unhide()
-                running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                SnapLogger.shared.log("Showing app: \(dockApp.title) — pid=\(running.processIdentifier)")
+                showApplication(running, title: dockApp.title)
             }
             return
         }
@@ -487,13 +484,178 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.openApplication(
             at: dockApp.url,
             configuration: config
-        ) { [weak self] _, error in
+        ) { [weak self] launchedApp, error in
+            guard let self else { return }
+
             if let error {
                 DispatchQueue.main.async {
-                    self?.startupMessage = "Launch failed: \(error.localizedDescription)"
-                    self?.updateStatus()
+                    self.startupMessage = "Launch failed: \(error.localizedDescription)"
+                    self.updateStatus()
+                }
+                return
+            }
+
+            guard let launchedApp else {
+                DispatchQueue.main.async {
+                    self.startupMessage = "Launch succeeded, but macOS returned no application."
+                    self.updateStatus()
+                }
+                return
+            }
+
+            // Launch completion only means the process has launched. Some macOS apps
+            // (notably Messages) create their first window shortly afterwards.
+            // Wait asynchronously for the AX window tree to become available, then
+            // raise the window. This never blocks the hotkey handler or adds polling
+            // while the app is idle.
+            self.showLaunchedApplication(launchedApp, title: dockApp.title)
+        }
+    }
+
+    private func runningApplication(for dockApp: DockReader.DockApp) -> NSRunningApplication? {
+        if let bundleID = dockApp.bundleID,
+           let running = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { !$0.isTerminated }) {
+            SnapLogger.shared.log("Target resolved: \(dockApp.title) — pid=\(running.processIdentifier) — \(dockApp.url.path)")
+            return running
+        }
+
+        // Bundle identifiers are not always available from Dock Accessibility.
+        // Resolve the exact Dock URL through NSWorkspace instead of failing over
+        // to an unrelated process or treating the app as unresolvable.
+        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: dockApp.url),
+           let bundleID = Bundle(url: appURL)?.bundleIdentifier,
+           let running = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { !$0.isTerminated }) {
+            SnapLogger.shared.log("Target resolved via URL: \(dockApp.title) — pid=\(running.processIdentifier)")
+            return running
+        }
+
+        return nil
+    }
+
+    private func applicationAXElement(for running: NSRunningApplication) -> AXUIElement {
+        AXUIElementCreateApplication(running.processIdentifier)
+    }
+
+    private func windows(for running: NSRunningApplication) -> [AXUIElement] {
+        let appElement = applicationAXElement(for: running)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            appElement,
+            kAXWindowsAttribute as CFString,
+            &value
+        ) == .success else {
+            return []
+        }
+        return value as? [AXUIElement] ?? []
+    }
+
+    private func axBool(_ element: AXUIElement, _ attribute: String) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? Bool
+    }
+
+    private func setAXBool(_ element: AXUIElement, _ attribute: String, _ value: Bool) {
+        AXUIElementSetAttributeValue(element, attribute as CFString, value as CFTypeRef)
+    }
+
+    private func hasVisibleWindow(for running: NSRunningApplication) -> Bool {
+        for window in windows(for: running) {
+            let minimized = axBool(window, kAXMinimizedAttribute) ?? false
+            let subrole = (attribute(window, kAXSubroleAttribute) as? String) ?? ""
+            if !minimized && (subrole == kAXStandardWindowSubrole as String || subrole == kAXDialogSubrole as String || subrole.isEmpty) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else {
+            return nil
+        }
+        return value
+    }
+
+    private func showLaunchedApplication(_ running: NSRunningApplication, title: String) {
+        SnapLogger.shared.log("Launch completed: \(title) — pid=\(running.processIdentifier)")
+
+        // A newly launched application may not have created its first AX window
+        // yet. Check a small number of times over a short window, stopping as soon
+        // as a usable window appears. This is event-driven/asynchronous and only
+        // runs for the brief launch transition; there is no permanent polling.
+        let delays: [TimeInterval] = [0.0, 0.03, 0.08, 0.15, 0.30, 0.50]
+
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak running] in
+                guard let self, let running, !running.isTerminated else { return }
+
+                running.unhide()
+                running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                self.raiseWindows(of: running, title: title)
+
+                if self.hasUsableWindow(for: running) {
+                    SnapLogger.shared.log("Launch window ready: \(title)")
+                } else if delay == delays.last {
+                    SnapLogger.shared.log("Launch window not available after retry window: \(title)")
                 }
             }
+        }
+    }
+
+    private func hasUsableWindow(for running: NSRunningApplication) -> Bool {
+        return !windows(for: running).isEmpty
+    }
+
+    private func showApplication(_ running: NSRunningApplication, title: String) {
+        // Unhide and activate first. Some macOS apps need a second pass after
+        // activation before their Accessibility window tree becomes current.
+        running.unhide()
+        running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+
+        raiseWindows(of: running, title: title)
+
+        // A tiny asynchronous retry handles apps such as Messages whose window
+        // server state is updated just after activation. No animation is added.
+        DispatchQueue.main.async { [weak self, weak running] in
+            guard let self, let running else { return }
+            self.raiseWindows(of: running, title: title)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak running] in
+            guard let self, let running else { return }
+            if !running.isActive || !self.hasVisibleWindow(for: running) {
+                running.unhide()
+                running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            }
+            self.raiseWindows(of: running, title: title)
+        }
+    }
+
+    private func raiseWindows(of running: NSRunningApplication, title: String) {
+        let appElement = applicationAXElement(for: running)
+        var mainWindow: CFTypeRef?
+        if AXUIElementCopyAttributeValue(appElement, kAXMainWindowAttribute as CFString, &mainWindow) == .success {
+            let window = mainWindow as! AXUIElement
+            setAXBool(window, kAXMinimizedAttribute, false)
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+            SnapLogger.shared.log("Raised main window: \(title)")
+        }
+
+        // If there is no main window, raise the first non-minimized window.
+        for window in windows(for: running) {
+            let minimized = axBool(window, kAXMinimizedAttribute) ?? false
+            if minimized {
+                setAXBool(window, kAXMinimizedAttribute, false)
+            }
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+            if !minimized { break }
         }
     }
 
@@ -502,11 +664,10 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
             .runningApplications(withBundleIdentifier: "com.apple.finder")
             .first {
 
-            if finder.isActive {
+            if finder.isActive && hasVisibleWindow(for: finder) {
                 finder.hide()
             } else {
-                finder.unhide()
-                finder.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                showApplication(finder, title: "Finder")
             }
             return
         }
@@ -514,7 +675,16 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") {
             let config = NSWorkspace.OpenConfiguration()
             config.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: config)
+            NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] launchedApp, error in
+                guard let self else { return }
+                if let error {
+                    SnapLogger.shared.log("Finder launch failed: \(error.localizedDescription)")
+                    return
+                }
+                if let launchedApp {
+                    self.showLaunchedApplication(launchedApp, title: "Finder")
+                }
+            }
         }
     }
 
