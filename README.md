@@ -1,43 +1,48 @@
 # Snap-Productivity
 
-Snap-Productivity is a lightweight macOS menu-bar utility that lets you switch between Finder and the numbered applications in your Dock using Command + number shortcuts.
+Snap-Productivity is a lightweight native macOS utility that lets you switch between Finder and the numbered applications in your Dock with Command + number shortcuts.
 
-## What it does
+## Shortcuts
 
 - **⌘0** — Show or hide Finder.
 - **⌘1–⌘9** — Show or hide the corresponding numbered Dock application.
-- If a Dock application is not running, Snap-Productivity can launch it.
-- Runs as a small menu-bar utility without opening a normal Dock window.
-- Includes a menu-bar status item so you can see whether Accessibility, keyboard monitoring, and Dock access are working.
+- If the selected Dock application is not running, Snap-Productivity can launch it.
+
+## How it works
+
+- Native Swift macOS application.
+- Runs as an accessory application rather than a normal Dock application.
+- Uses a global keyboard event tap for the Command + number shortcuts.
+- Does not use a browser engine, network service, or continuous polling loop.
+- Registers itself as a macOS Login Item so it can start automatically when you log in.
+- Creates a menu-bar status item. If the icon is not visible because of menu-bar layout/visibility, the application can still run normally in the background.
 
 ## Requirements
 
-- macOS 13 or newer
-- Xcode Command Line Tools (`swiftc`, `codesign`, and `lipo`)
-- Accessibility permission
-- Input Monitoring permission
+- macOS 13 or newer.
+- Xcode Command Line Tools (`swiftc`, `codesign`, and `lipo`).
+- Accessibility permission.
+- Input Monitoring permission.
 
-## Run locally
-
-The project is intended to be built locally on the Mac where it will run.
+## Install locally
 
 ### 1. Extract the project
 
-Put the project folder somewhere convenient, such as:
+Put the project somewhere convenient, such as:
 
-`~/Downloads/Snap-Productivity`
+`~/Downloads/Snap-Productivity-1.0.0`
 
 Open Terminal and enter the project directory:
 
 ```bash
-cd ~/Downloads/Snap-Productivity
+cd ~/Downloads/Snap-Productivity-1.0.0
 ```
 
-If the downloaded folder has a version suffix, use that actual folder name instead.
+If the folder has a different name, use that actual folder name.
 
-### 2. Remove macOS quarantine
+### 2. Remove the downloaded-file quarantine
 
-If macOS downloaded the project from the internet, remove the quarantine attribute before running the installer:
+If macOS downloaded the project from the internet, run:
 
 ```bash
 xattr -dr com.apple.quarantine .
@@ -49,7 +54,7 @@ xattr -dr com.apple.quarantine .
 chmod +x install.sh uninstall.sh diagnose.sh
 ```
 
-### 4. Install and build
+### 4. Build and install
 
 ```bash
 ./install.sh
@@ -57,41 +62,54 @@ chmod +x install.sh uninstall.sh diagnose.sh
 
 The installer:
 
-- compiles the native Swift executable for Apple silicon and Intel Macs
-- creates the application bundle
-- signs the local application
+- builds native arm64 and x86_64 executables
+- combines them into one universal binary
+- creates `~/Applications/Snap-Productivity.app`
+- applies a local ad-hoc code signature
 - clears the application's quarantine attribute
-- installs it to `~/Applications/`
+- verifies the application bundle
 - launches the application
 
 No `sudo` is required.
 
-## macOS permissions
+## First-run permissions
 
 After installation, open:
 
 **System Settings → Privacy & Security → Accessibility**
 
-Add the installed application and turn it **ON**.
+Find **Snap-Productivity**, add it if necessary, and turn it **ON**.
 
 Then open:
 
 **System Settings → Privacy & Security → Input Monitoring**
 
-Add the installed application and turn it **ON**.
+Find **Snap-Productivity**, add it if necessary, and turn it **ON**.
 
-If the application is already listed, make sure the toggle is enabled.
-
-After changing either permission, quit and reopen the application:
+After changing either permission, restart the app:
 
 ```bash
-killall SnapReplacement 2>/dev/null || true
-open ~/Applications/SnapReplacement.app
+killall SnapProductivity 2>/dev/null || true
+open ~/Applications/Snap-Productivity.app
 ```
 
-## Verify that it is running
+## Start automatically at login
 
-Run:
+Snap-Productivity registers itself with macOS as a Login Item when it launches.
+
+Verify it in:
+
+**System Settings → General → Login Items & Extensions**
+
+Look for **Snap-Productivity** in the applications allowed to run at login.
+
+If registration succeeded, macOS will launch Snap-Productivity automatically after you log in. It runs as an accessory/background application; you do not need to manually open it each time.
+
+If you disable or remove the Login Item, it will no longer start automatically.
+
+## Verify that it is working
+
+From the project directory:
 
 ```bash
 ./diagnose.sh
@@ -100,26 +118,32 @@ Run:
 You can also inspect the log:
 
 ```bash
-tail -50 ~/Library/Logs/SnapReplacement.log
+tail -50 ~/Library/Logs/Snap-Productivity.log
 ```
 
-A healthy installation should show that:
+A healthy launch should show:
 
 - Accessibility is trusted.
-- Input Monitoring is available.
-- The keyboard event tap was created and enabled.
-- The Dock reader can see the numbered Dock applications.
+- The keyboard event tap is created/enabled.
+- Dock applications are detected.
+- Login Item registration succeeds.
 
-## Testing the shortcuts
+To verify the running process directly:
 
-With the application running:
+```bash
+pgrep -fl SnapProductivity
+```
 
-1. Put any application in the Dock.
-2. Position it in the desired numbered slot.
-3. Press **⌘1–⌘9** to show or hide that application.
-4. Press **⌘0** to show or hide Finder.
+## Menu-bar icon
 
-Only Command + number shortcuts are intercepted. Other keyboard input is left alone.
+Snap-Productivity creates a menu-bar status item. The icon is intentionally minimal.
+
+If the icon is not visible, this does not by itself mean the application is stopped. Verify the process and log with:
+
+```bash
+pgrep -fl SnapProductivity
+tail -50 ~/Library/Logs/Snap-Productivity.log
+```
 
 ## Uninstall
 
@@ -131,14 +155,14 @@ From the project directory:
 
 This removes the installed application and its local log.
 
-## Notes
+## Important note about local builds
 
-This is a local macOS utility built directly from Swift. The installer uses an ad-hoc local signature, so macOS may require you to approve the application and grant its privacy permissions again after rebuilding or changing the application's identity.
+This project is intended to be built locally on the Mac where it will run.
 
-Do not use:
+The installer uses an ad-hoc local code signature because there is no Apple Developer signing identity required for this local build. A newly rebuilt application can have a different code-signing identity, so macOS may require Accessibility and Input Monitoring permissions to be granted again after replacing the installed application.
 
-```bash
-sudo tccutil reset All
-```
+For normal use, keep the installed build in:
 
-That would reset privacy permissions system-wide and is unnecessary for this project.
+`~/Applications/Snap-Productivity.app`
+
+and leave its Login Item enabled.

@@ -31,7 +31,7 @@ final class SnapLogger {
     }
 }
 
-private let bundleIdentifier = "com.safibaig.SnapReplacement141"
+private let bundleIdentifier = "com.safibaig.SnapProductivity"
 
 final class HotkeyManager {
     enum State {
@@ -312,16 +312,24 @@ final class SnapReplacementDelegate: NSObject, NSApplicationDelegate {
     private var startupMessage = "Starting…"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SnapLogger.shared.log("=== SnapReplacement 1.4.1 launched ===")
+        SnapLogger.shared.log("=== Snap-Productivity 1.0.0 launched ===")
         SnapLogger.shared.log("Bundle path: \(Bundle.main.bundlePath)")
         SnapLogger.shared.log("PID: \(ProcessInfo.processInfo.processIdentifier)")
         SnapLogger.shared.log("AXIsProcessTrusted at launch: \(AXIsProcessTrusted())")
         NSApp.setActivationPolicy(.accessory)
 
+        // Register this app as a macOS Login Item so it starts automatically.
+        do {
+            try SMAppService.mainApp.register()
+            SnapLogger.shared.log("Login Item registration: SUCCESS")
+        } catch {
+            SnapLogger.shared.log("Login Item registration: FAILED — \(error.localizedDescription)")
+        }
+
         // Create the status item FIRST so a running process is always observable.
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = "⌘"
-        item.button?.toolTip = "SnapReplacement"
+        item.button?.toolTip = "Snap-Productivity"
         item.isVisible = true
         statusItem = item
         SnapLogger.shared.log("Status item created")
@@ -352,7 +360,7 @@ final class SnapReplacementDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let header = NSMenuItem(title: "SnapReplacement", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "Snap-Productivity", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
@@ -423,7 +431,7 @@ final class SnapReplacementDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
-            title: "Quit SnapReplacement",
+            title: "Quit Snap-Productivity",
             action: #selector(quit),
             keyEquivalent: "q"
         )

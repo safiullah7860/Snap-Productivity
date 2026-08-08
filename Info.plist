@@ -4,14 +4,14 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>SnapReplacement</string>
-    <key>CFBundleExecutable</key><string>SnapReplacement</string>
-    <key>CFBundleIdentifier</key><string>com.safibaig.SnapReplacement141</string>
+    <key>CFBundleDisplayName</key><string>Snap-Productivity</string>
+    <key>CFBundleExecutable</key><string>SnapProductivity</string>
+    <key>CFBundleIdentifier</key><string>com.safibaig.SnapProductivity</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>SnapReplacement</string>
+    <key>CFBundleName</key><string>Snap-Productivity</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.4.1</string>
-    <key>CFBundleVersion</key><string>4</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
