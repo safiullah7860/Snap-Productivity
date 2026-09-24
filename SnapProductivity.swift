@@ -171,13 +171,13 @@ final class HotkeyManager {
             self?.delegate?.performShortcut(slot: slot)
         }
 
-        // Consume only bare Command+0 through Command+9.
+        // Consume only bare Command+` and Command+1 through Command+9.
         return nil
     }
 
     private static func slot(for keyCode: Int64) -> Int? {
         switch keyCode {
-        case 29: return 0
+        case 50: return 0   // Command + ` → Finder
         case 18: return 1
         case 19: return 2
         case 20: return 3
@@ -447,7 +447,7 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
 
     func performShortcut(slot: Int) {
         SnapLogger.shared.log("Shortcut received: Command+\(slot)")
-        startupMessage = "Last shortcut: ⌘\(slot)"
+        startupMessage = slot == 0 ? "Last shortcut: ⌘`" : "Last shortcut: ⌘\(slot)"
         updateStatus()
 
         if slot == 0 {
@@ -567,11 +567,9 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showApplication(_ running: NSRunningApplication, title: String, url: URL) {
-        // Use LaunchServices/NSWorkspace for the SHOW path rather than
-        // NSRunningApplication.activate(). Some macOS apps (notably Messages)
-        // can be running with a visible window while macOS has not actually
-        // brought that window to the foreground. The Dock's native behavior
-        // is closer to LaunchServices opening the app again.
+        // LaunchServices brings the application/window forward, while an
+        // explicit activation makes the target the active application so
+        // subsequent keyboard input is delivered to it (like Cmd+Tab).
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
 
@@ -583,26 +581,43 @@ final class SnapProductivityDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            // The open request can complete before the WindowServer has
-            // updated the app's Accessibility/window state. Raise only when
-            // a window is available; this is a short, event-driven retry,
-            // not a permanent polling loop.
-            self.raiseWindows(of: running, title: title)
+            self.activateAndFocus(running, title: title)
             DispatchQueue.main.async { [weak self, weak running] in
                 guard let self, let running else { return }
-                self.raiseWindows(of: running, title: title)
+                self.activateAndFocus(running, title: title)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak running] in
                 guard let self, let running else { return }
-                self.raiseWindows(of: running, title: title)
+                self.activateAndFocus(running, title: title)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak running] in
                 guard let self, let running else { return }
-                self.raiseWindows(of: running, title: title)
+                self.activateAndFocus(running, title: title)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) { [weak self, weak running] in
                 guard let self, let running else { return }
-                self.raiseWindows(of: running, title: title)
+                self.activateAndFocus(running, title: title)
+            }
+        }
+    }
+
+    private func activateAndFocus(_ running: NSRunningApplication, title: String) {
+        // This allows window switching to be active on the last opened window. Without this, the app may be active but the last window may not be focused.
+        // Raising changes z-order; activation changes the process receiving
+        // keyboard events.
+        _ = running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        raiseWindows(of: running, title: title)
+
+        let appElement = applicationAXElement(for: running)
+        for window in windows(for: running) {
+            let minimized = axBool(window, kAXMinimizedAttribute) ?? false
+            if minimized {
+                setAXBool(window, kAXMinimizedAttribute, false)
+            }
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+            if let main = attribute(window, kAXMainAttribute) as? Bool, main {
+                AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, window)
+                break
             }
         }
     }

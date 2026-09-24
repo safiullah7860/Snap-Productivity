@@ -4,7 +4,7 @@ Snap-Productivity is a lightweight native macOS utility that lets you switch bet
 
 ## Shortcuts
 
-- **⌘0** — Show or hide Finder.
+- **⌘`** — Show or hide Finder.
 - **⌘1–⌘9** — Show or hide the corresponding numbered Dock application.
 - If the selected Dock application is not running, Snap-Productivity can launch it.
 
