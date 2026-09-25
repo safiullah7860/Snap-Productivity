@@ -39,8 +39,18 @@ cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 cp "$BUILD/SnapProductivity" "$APP/Contents/MacOS/SnapProductivity"
 chmod 755 "$APP/Contents/MacOS/SnapProductivity"
 
-echo "[4/6] Ad-hoc signing and clearing quarantine..."
-codesign --force --deep --sign - "$APP"
+SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development:/ {print $2; exit}')"
+fi
+
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  echo "[4/6] Signing with: $SIGNING_IDENTITY"
+  codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP"
+else
+  echo "[4/6] No Apple Development identity found; using ad-hoc signing."
+  codesign --force --deep --sign - "$APP"
+fi
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
 echo "[5/6] Verifying installation..."
@@ -66,4 +76,5 @@ echo "2. Enable Snap-Productivity in Input Monitoring."
 echo "3. Quit and relaunch it once."
 echo "4. Confirm it appears under General -> Login Items & Extensions."
 echo
+echo "Signing identity: ${SIGNING_IDENTITY:-ad-hoc}"
 echo "This build uses LaunchServices/NSWorkspace to show running or closed apps, with short Accessibility window-raise retries for WindowServer timing."
